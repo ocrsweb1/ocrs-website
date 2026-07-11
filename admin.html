@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OCRS · Administrator Dashboard</title>
+<link rel="stylesheet" href="css/styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <nav class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="seal-mark">SL</div>
+        <div class="name">OCRS<small>SLSU · Lucena Campus</small></div>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-eyebrow">Monitoring</div>
+        <div class="nav-item active" data-view="overview"><span class="dot"></span> Overview</div>
+        <div class="nav-item" data-view="progress"><span class="dot"></span> Faculty Progress</div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-eyebrow">Management</div>
+        <div class="nav-item" data-view="users"><span class="dot"></span> Accounts</div>
+        <div class="nav-item" data-view="structure"><span class="dot"></span> Academic Structure</div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-eyebrow">Governance</div>
+        <div class="nav-item" data-view="reports"><span class="dot"></span> Reports</div>
+        <div class="nav-item" data-view="audit"><span class="dot"></span> Audit Log</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="avatar" id="user-avatar">—</div>
+          <div class="who"><b id="user-name">Loading…</b><span id="user-meta">Administrator</span></div>
+        </div>
+        <button class="btn signout" id="signout-btn">Sign out</button>
+      </div>
+    </nav>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="title-block">
+          <div class="eyebrow">Administrator Dashboard</div>
+          <h1 id="page-title">Institutional Overview</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-gold" id="new-user-btn" style="display:none">+ New Account</button>
+          <button class="btn btn-gold" id="new-struct-btn" style="display:none">+ Add</button>
+          <button class="menu-toggle" id="menu-toggle">☰</button>
+        </div>
+      </div>
+
+      <!-- OVERVIEW -->
+      <section id="view-overview" class="view">
+        <div class="grid grid-4" id="overview-stats" style="margin-bottom:20px"><div class="card center-loader">Loading…</div></div>
+        <div class="grid" style="grid-template-columns:1.3fr 1fr">
+          <div class="card">
+            <div class="card-header"><h3>Average GPA by Program</h3></div>
+            <canvas id="program-chart" height="150"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Students Needing Academic Support</h3></div>
+            <div id="support-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FACULTY PROGRESS -->
+      <section id="view-progress" class="view" style="display:none">
+        <div class="filters-bar">
+          <select id="progress-filter-sem"><option value="">All Semesters</option></select>
+        </div>
+        <div class="card flush">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Faculty</th><th>Class</th><th>Section</th><th class="num">Enrolled</th><th class="num">Encoded</th><th>Progress</th><th>Status</th></tr></thead>
+              <tbody id="progress-tbody"><tr><td colspan="7" class="center-loader">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- USERS -->
+      <section id="view-users" class="view" style="display:none">
+        <div class="filters-bar">
+          <select id="user-filter-role">
+            <option value="">All Roles</option><option value="student">Student</option>
+            <option value="faculty">Faculty</option><option value="admin">Admin</option>
+          </select>
+          <input type="text" id="user-search" placeholder="Search name or email…" />
+        </div>
+        <div class="card flush">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>ID No.</th><th>Program/Dept</th><th>Status</th><th></th></tr></thead>
+              <tbody id="users-tbody"><tr><td colspan="7" class="center-loader">Loading accounts…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACADEMIC STRUCTURE -->
+      <section id="view-structure" class="view" style="display:none">
+        <div class="filters-bar">
+          <select id="structure-type">
+            <option value="academic_years">Academic Years</option>
+            <option value="semesters">Semesters</option>
+            <option value="subjects">Subjects</option>
+            <option value="sections">Sections</option>
+          </select>
+        </div>
+        <div class="card flush">
+          <div class="table-wrap"><table><thead id="structure-thead"></thead><tbody id="structure-tbody"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- REPORTS -->
+      <section id="view-reports" class="view" style="display:none">
+        <div class="grid grid-3">
+          <div class="card">
+            <h3>Institutional Overview</h3>
+            <p class="subtle">Enrollment, GPA distribution, and completion snapshot.</p>
+            <button class="btn btn-outline btn-sm" data-report="institutional">Generate CSV</button>
+          </div>
+          <div class="card">
+            <h3>Student Academic Standing</h3>
+            <p class="subtle">Standing (Dean's Lister, Good Standing, Needs Support) per student.</p>
+            <button class="btn btn-outline btn-sm" data-report="standing">Generate CSV</button>
+          </div>
+          <div class="card">
+            <h3>Faculty Grade Summary</h3>
+            <p class="subtle">Per-faculty encoding completion and lock status.</p>
+            <button class="btn btn-outline btn-sm" data-report="faculty">Generate CSV</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- AUDIT LOG -->
+      <section id="view-audit" class="view" style="display:none">
+        <div class="card flush">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Timestamp</th><th>Action</th><th>Performed By</th><th>Target</th><th>Details</th></tr></thead>
+              <tbody id="audit-tbody"><tr><td colspan="5" class="center-loader">Loading audit log…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- New/Edit User Modal -->
+  <div class="modal-overlay" id="user-modal">
+    <div class="modal">
+      <div class="modal-head"><h3 id="user-modal-title">New Account</h3><button class="modal-close" data-close>&times;</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Role</label>
+          <select id="u-role"><option value="student">Student</option><option value="faculty">Faculty</option><option value="admin">Admin</option></select>
+        </div>
+        <div class="field"><label>Full Name</label><input id="u-fullName" type="text" /></div>
+        <div class="field"><label>Email</label><input id="u-email" type="email" /></div>
+        <div class="field" id="u-password-field"><label>Temporary Password</label><input id="u-password" type="text" placeholder="min. 8 characters" /></div>
+        <div class="field" id="u-idno-field"><label id="u-idno-label">Student Number</label><input id="u-idno" type="text" /></div>
+        <div class="grid grid-2" id="u-student-fields">
+          <div class="field"><label>Program</label><input id="u-program" type="text" placeholder="e.g. BSIT" /></div>
+          <div class="field"><label>Year Level</label><input id="u-yearLevel" type="text" placeholder="e.g. 3rd Year" /></div>
+        </div>
+        <div class="field" id="u-section-field"><label>Section</label><input id="u-section" type="text" placeholder="e.g. BSIT-3A" /></div>
+        <div class="error-text" id="user-modal-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close>Cancel</button>
+        <button class="btn btn-primary" id="u-save-btn">Create Account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Structure Item Modal -->
+  <div class="modal-overlay" id="struct-modal">
+    <div class="modal">
+      <div class="modal-head"><h3 id="struct-modal-title">Add Item</h3><button class="modal-close" data-close>&times;</button></div>
+      <div class="modal-body" id="struct-modal-body"></div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close>Cancel</button>
+        <button class="btn btn-primary" id="struct-save-btn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unlock reason modal -->
+  <div class="modal-overlay" id="unlock-modal">
+    <div class="modal">
+      <div class="modal-head"><h3>Unlock Grade Sheet</h3><button class="modal-close" data-close>&times;</button></div>
+      <div class="modal-body">
+        <p class="hint" style="margin-bottom:10px">This action is recorded in the audit log.</p>
+        <div class="field"><label>Reason</label><textarea id="unlock-reason" rows="3" placeholder="e.g. Correction requested by faculty for computation error"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close>Cancel</button>
+        <button class="btn btn-danger" id="unlock-confirm-btn">Unlock</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-root"></div>
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

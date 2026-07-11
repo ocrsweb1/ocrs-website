@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OCRS · SLSU Lucena — Sign In</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="auth-shell">
+    <aside class="auth-visual">
+      <div>
+        <div class="seal-mark">SL</div>
+        <div class="eyebrow">Southern Luzon State University — Lucena Campus</div>
+        <h1>Online Class Record &amp; Academic Monitoring System</h1>
+        <p class="lede">One secure record of truth for grades, attendance, and academic standing —
+          real-time for students, streamlined for faculty, transparent for administrators.</p>
+      </div>
+      <div class="auth-stats">
+        <div><b>Real-time</b><span>Grade &amp; GPA sync</span></div>
+        <div><b>Role-based</b><span>Postgres row-level security</span></div>
+        <div><b>Audited</b><span>Every lock &amp; edit logged</span></div>
+      </div>
+    </aside>
+
+    <div class="auth-form-wrap">
+      <div class="auth-card">
+        <h2 style="margin-bottom:2px">Sign in</h2>
+        <p style="margin-bottom:22px;font-size:13.5px">Use the account issued by your administrator.</p>
+
+        <div class="role-tabs" role="tablist" aria-label="Account type">
+          <button class="role-tab active" data-role="student" type="button">Student</button>
+          <button class="role-tab" data-role="faculty" type="button">Faculty</button>
+          <button class="role-tab" data-role="admin" type="button">Admin</button>
+        </div>
+
+        <form id="login-form" novalidate>
+          <div class="field">
+            <label for="email" id="email-label">Student ID / Email</label>
+            <input id="email" type="text" autocomplete="username" placeholder="e.g. 21-04521@slsu.edu.ph" required />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
+          </div>
+          <div class="error-text" id="login-error"></div>
+          <button class="btn btn-primary btn-block" id="login-btn" type="submit">Sign in</button>
+        </form>
+
+        <div class="flex items-center" style="justify-content:space-between;margin-top:14px">
+          <a href="#" id="forgot-link" style="font-size:12.5px">Forgot password?</a>
+          <span style="font-size:12px;color:var(--ink-500)">v1.0 · Supabase</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-root"></div>
+
+  <script type="module">
+    import { login, resetPassword, routeForRole } from "./js/auth.js";
+    import { toast, $ } from "./js/utils.js";
+
+    let selectedRole = "student";
+    const emailLabel = $("#email-label");
+    const emailInput = $("#email");
+
+    const roleCopy = {
+      student: { label: "Student ID / Email", ph: "e.g. 21-04521@slsu.edu.ph" },
+      faculty: { label: "Employee ID / Email", ph: "e.g. jdcruz@slsu.edu.ph" },
+      admin: { label: "Admin Email", ph: "e.g. registrar@slsu.edu.ph" },
+    };
+
+    document.querySelectorAll(".role-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".role-tab").forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        selectedRole = tab.dataset.role;
+        emailLabel.textContent = roleCopy[selectedRole].label;
+        emailInput.placeholder = roleCopy[selectedRole].ph;
+      });
+    });
+
+    $("#login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errEl = $("#login-error");
+      errEl.classList.remove("show");
+      const btn = $("#login-btn");
+      btn.disabled = true;
+      btn.textContent = "Signing in…";
+      try {
+        const email = emailInput.value.trim();
+        const password = $("#password").value;
+        const profile = await login(email, password);
+        if (profile.role !== selectedRole) {
+          throw new Error(`This account is registered as ${profile.role}. Select the "${profile.role}" tab.`);
+        }
+        toast(`Welcome back, ${profile.fullName?.split(" ")[0] || ""}.`);
+        location.href = routeForRole(profile.role);
+      } catch (err) {
+        errEl.textContent = friendlyAuthError(err);
+        errEl.classList.add("show");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Sign in";
+      }
+    });
+
+    $("#forgot-link").addEventListener("click", async (e) => {
+      e.preventDefault();
+      const email = emailInput.value.trim();
+      if (!email) return toast("Enter your email above first, then click 'Forgot password?' again.", "error");
+      try {
+        await resetPassword(email);
+        toast("Password reset email sent. Check your inbox.");
+      } catch (err) {
+        toast("Could not send reset email. Check the address and try again.", "error");
+      }
+    });
+
+    function friendlyAuthError(err) {
+      const msg = (err?.message || "").toLowerCase();
+      if (msg.includes("invalid login credentials")) return "Incorrect email or password.";
+      if (msg.includes("too many requests") || msg.includes("rate limit")) return "Too many attempts. Please wait and try again.";
+      if (msg.includes("email not confirmed")) return "This account's email hasn't been confirmed yet. Contact your administrator.";
+      return err?.message || "Something went wrong while signing in.";
+    }
+  </script>
+</body>
+</html>

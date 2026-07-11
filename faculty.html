@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OCRS · Faculty Dashboard</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <nav class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="seal-mark">SL</div>
+        <div class="name">OCRS<small>SLSU · Lucena Campus</small></div>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-eyebrow">Teaching</div>
+        <div class="nav-item active" data-view="overview"><span class="dot"></span> Overview</div>
+        <div class="nav-item" data-view="classes"><span class="dot"></span> My Classes</div>
+        <div class="nav-item" data-view="encoding"><span class="dot"></span> Grade Encoding</div>
+        <div class="nav-item" data-view="attendance"><span class="dot"></span> Attendance</div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-eyebrow">Reports</div>
+        <div class="nav-item" data-view="export"><span class="dot"></span> Export Records</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="avatar" id="user-avatar">—</div>
+          <div class="who"><b id="user-name">Loading…</b><span id="user-meta">Faculty</span></div>
+        </div>
+        <button class="btn signout" id="signout-btn">Sign out</button>
+      </div>
+    </nav>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="title-block">
+          <div class="eyebrow">Faculty Dashboard</div>
+          <h1 id="page-title">Teaching Overview</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-gold" id="new-class-btn" style="display:none">+ New Class</button>
+          <button class="menu-toggle" id="menu-toggle">☰</button>
+        </div>
+      </div>
+
+      <!-- OVERVIEW -->
+      <section id="view-overview" class="view">
+        <div class="grid grid-4" id="overview-stats" style="margin-bottom:20px">
+          <div class="card center-loader">Loading…</div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Encoding Completion by Class</h3></div>
+          <div id="completion-list"></div>
+        </div>
+      </section>
+
+      <!-- CLASSES -->
+      <section id="view-classes" class="view" style="display:none">
+        <div class="grid grid-3" id="classes-grid"><div class="card center-loader">Loading classes…</div></div>
+      </section>
+
+      <!-- ENCODING -->
+      <section id="view-encoding" class="view" style="display:none">
+        <div class="filters-bar">
+          <select id="encoding-class-select"><option value="">Select a class…</option></select>
+          <button class="btn btn-outline btn-sm" id="weights-btn">Grading Weights</button>
+          <button class="btn btn-outline btn-sm" id="lock-toggle-btn" style="display:none">Lock Grade Sheet</button>
+        </div>
+        <div id="encoding-locked-banner"></div>
+        <div class="card flush" id="encoding-card" style="display:none">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th class="num">Activities <span class="hint" style="display:block;font-weight:400">comma-sep</span></th>
+                  <th class="num">Quizzes <span class="hint" style="display:block;font-weight:400">comma-sep</span></th>
+                  <th class="num">Projects <span class="hint" style="display:block;font-weight:400">comma-sep</span></th>
+                  <th class="num">Midterm</th>
+                  <th class="num">Final Exam</th>
+                  <th class="num">Final Grade</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="encoding-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="flex" style="justify-content:flex-end;margin-top:14px" id="save-encoding-row" style="display:none">
+          <button class="btn btn-primary" id="save-encoding-btn">Save Grades</button>
+        </div>
+      </section>
+
+      <!-- ATTENDANCE -->
+      <section id="view-attendance" class="view" style="display:none">
+        <div class="filters-bar">
+          <select id="att-class-select"><option value="">Select a class…</option></select>
+          <input type="date" id="att-date" />
+          <button class="btn btn-outline btn-sm" id="load-attendance-btn">Load</button>
+        </div>
+        <div class="card flush" id="attendance-card" style="display:none">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Status</th><th>Remarks</th></tr></thead>
+              <tbody id="attendance-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="flex" style="justify-content:flex-end;margin-top:14px" id="save-attendance-row" style="display:none">
+          <button class="btn btn-primary" id="save-attendance-btn">Save Attendance</button>
+        </div>
+      </section>
+
+      <!-- EXPORT -->
+      <section id="view-export" class="view" style="display:none">
+        <div class="card" style="max-width:520px">
+          <div class="card-header"><h3>Export Class Records</h3></div>
+          <div class="field">
+            <label for="export-class-select">Class</label>
+            <select id="export-class-select"><option value="">Select a class…</option></select>
+          </div>
+          <div class="flex gap-8">
+            <button class="btn btn-outline" id="export-grades-btn">Export Grade Sheet (CSV)</button>
+            <button class="btn btn-outline" id="export-attendance-btn">Export Attendance (CSV)</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- New Class Modal -->
+  <div class="modal-overlay" id="class-modal">
+    <div class="modal">
+      <div class="modal-head"><h3>New Class</h3><button class="modal-close" data-close>&times;</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Subject</label><select id="nc-subject"></select></div>
+        <div class="field"><label>Section</label><select id="nc-section"></select></div>
+        <div class="field"><label>Academic Year</label><select id="nc-year"></select></div>
+        <div class="field"><label>Semester</label><select id="nc-semester"></select></div>
+        <p class="hint">Enrolled students can be added afterward from the class card once created (admin also manages enrollments).</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close>Cancel</button>
+        <button class="btn btn-primary" id="nc-create-btn">Create Class</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roster Modal -->
+  <div class="modal-overlay" id="roster-modal">
+    <div class="modal">
+      <div class="modal-head"><h3>Manage Roster</h3><button class="modal-close" data-close>&times;</button></div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Add Student by Email</label>
+          <div class="flex gap-8">
+            <input id="roster-add-email" type="email" placeholder="student@slsu.edu.ph" style="flex:1" />
+            <button class="btn btn-outline btn-sm" id="roster-add-btn">Add</button>
+          </div>
+          <p class="hint">Student accounts are provisioned by an administrator; enter the email already on file.</p>
+        </div>
+        <div class="divider"></div>
+        <div id="roster-list"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-primary" data-close>Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weights Modal -->
+  <div class="modal-overlay" id="weights-modal">
+    <div class="modal">
+      <div class="modal-head"><h3>Grading Weights</h3><button class="modal-close" data-close>&times;</button></div>
+      <div class="modal-body">
+        <p class="hint" style="margin-bottom:14px">Must total 100%.</p>
+        <div class="grid grid-2">
+          <div class="field"><label>Activities %</label><input type="number" id="w-activities" min="0" max="100" /></div>
+          <div class="field"><label>Quizzes %</label><input type="number" id="w-quizzes" min="0" max="100" /></div>
+          <div class="field"><label>Projects %</label><input type="number" id="w-projects" min="0" max="100" /></div>
+          <div class="field"><label>Midterm Exam %</label><input type="number" id="w-midtermExam" min="0" max="100" /></div>
+          <div class="field"><label>Final Exam %</label><input type="number" id="w-finalExam" min="0" max="100" /></div>
+        </div>
+        <div class="error-text" id="weights-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" data-close>Cancel</button>
+        <button class="btn btn-primary" id="save-weights-btn">Save Weights</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-root"></div>
+  <script type="module" src="js/faculty.js"></script>
+</body>
+</html>

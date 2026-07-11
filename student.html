@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OCRS · Student Dashboard</title>
+<link rel="stylesheet" href="css/styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <nav class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="seal-mark">SL</div>
+        <div class="name">OCRS<small>SLSU · Lucena Campus</small></div>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-eyebrow">Academics</div>
+        <div class="nav-item active" data-view="overview"><span class="dot"></span> Overview</div>
+        <div class="nav-item" data-view="grades"><span class="dot"></span> My Grades</div>
+        <div class="nav-item" data-view="attendance"><span class="dot"></span> Attendance</div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-eyebrow">Account</div>
+        <div class="nav-item" data-view="profile"><span class="dot"></span> My Profile</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="avatar" id="user-avatar">—</div>
+          <div class="who"><b id="user-name">Loading…</b><span id="user-meta">—</span></div>
+        </div>
+        <button class="btn signout" id="signout-btn">Sign out</button>
+      </div>
+    </nav>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="title-block">
+          <div class="eyebrow">Student Dashboard</div>
+          <h1 id="page-title">Academic Overview</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="menu-toggle" id="menu-toggle">☰</button>
+        </div>
+      </div>
+
+      <div id="warnings-slot"></div>
+
+      <!-- OVERVIEW -->
+      <section id="view-overview" class="view">
+        <div class="grid grid-4" id="overview-stats" style="margin-bottom:20px">
+          <div class="card center-loader">Loading…</div>
+        </div>
+        <div class="grid" style="grid-template-columns:1.4fr 1fr;margin-bottom:20px" id="overview-charts-row">
+          <div class="card">
+            <div class="card-header"><h3>Grade Trend by Subject</h3><span class="subtle">Current semester</span></div>
+            <canvas id="trend-chart" height="140"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Academic Standing</h3></div>
+            <div id="standing-block" class="flex items-center gap-8" style="flex-direction:column;padding-top:6px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Subjects This Semester</h3><span class="subtle" id="overview-subject-count"></span></div>
+          <div class="grid grid-3" id="subject-cards"></div>
+        </div>
+      </section>
+
+      <!-- GRADES -->
+      <section id="view-grades" class="view" style="display:none">
+        <div class="filters-bar">
+          <select id="filter-year"></select>
+          <select id="filter-semester"></select>
+          <select id="filter-subject"><option value="">All Subjects</option></select>
+        </div>
+        <div class="card flush">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Subject</th><th>Section</th><th class="num">Activities</th><th class="num">Quizzes</th>
+                  <th class="num">Projects</th><th class="num">Midterm</th><th class="num">Final Exam</th>
+                  <th class="num">Final Grade</th><th class="num">GPA</th><th>Remarks</th>
+                </tr>
+              </thead>
+              <tbody id="grades-tbody">
+                <tr><td colspan="10" class="center-loader">Loading grades…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ATTENDANCE -->
+      <section id="view-attendance" class="view" style="display:none">
+        <div class="filters-bar">
+          <select id="att-filter-subject"><option value="">All Subjects</option></select>
+        </div>
+        <div class="grid grid-4" id="attendance-stats" style="margin-bottom:18px"></div>
+        <div class="card flush">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Subject</th><th>Status</th><th>Remarks</th></tr></thead>
+              <tbody id="attendance-tbody"><tr><td colspan="4" class="center-loader">Loading attendance…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- PROFILE -->
+      <section id="view-profile" class="view" style="display:none">
+        <div class="card" style="max-width:560px">
+          <div class="card-header"><h3>Profile Information</h3></div>
+          <div id="profile-block" class="grid grid-2"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast-root"></div>
+
+  <script type="module" src="js/student.js"></script>
+</body>
+</html>

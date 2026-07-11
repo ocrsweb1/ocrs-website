@@ -1,0 +1,29 @@
+project_id = "ocrs-slsu-lucena"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:8888"
+additional_redirect_urls = ["http://localhost:8888"]
+jwt_expiry = 3600
+enable_signup = false  # accounts are provisioned only via the create-user-account Edge Function
+
+[edge_runtime]
+enabled = true
+
+[realtime]
+enabled = true

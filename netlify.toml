@@ -1,0 +1,24 @@
+[build]
+  publish = "."
+  command = "echo 'No build step — plain static HTML/CSS/JS'"
+  ignore = "exit 1" # never skip a build; every push should redeploy this static site
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+# Nothing to rewrite/redirect — this is a plain multi-page app
+# (index.html, student.html, faculty.html, admin.html each load directly).
