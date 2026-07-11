@@ -8,8 +8,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // TODO: replace with your project's values. The anon key is safe to
 // expose client-side — it identifies your project and is subject to
 // Row Level Security; it authorizes nothing by itself.
-const SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";
+const SUPABASE_URL = "https://vlyhswezqzsgxwyclbsq.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZseWhzd2V6cXpzZ3h3eWNsYnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NjI3MDgsImV4cCI6MjA5OTMzODcwOH0.ANOWiSbyc6rTR4XiJF-ayaNy3sJCR5NeN0RPglljI8A";
 
 // Local development: open the site with ?local=1 (e.g.
 // http://localhost:8888/index.html?local=1) to point at

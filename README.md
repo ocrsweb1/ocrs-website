@@ -20,11 +20,6 @@ js/utils.js                 Formatting, GPA math, CSV export, the "seal gauge"
 
 supabase/migrations/0001_init.sql   Tables, Row Level Security policies,
                                      helper functions, grade-computation trigger
-supabase/migrations/0002_add_grade_components.sql
-                                     Per-item grading: classes.grade_components,
-                                     updated trigger, backfill, forced recompute
-supabase/tests/compute_grade_record.test.sql
-                                     Self-contained SQL test suite for the trigger
 supabase/functions/*/index.ts       Edge Functions (account mgmt, locking, audit log)
 supabase/config.toml                Local Supabase CLI configuration
 
@@ -58,11 +53,9 @@ Firestore's field-level rule checks (see the comments at the top of
 1. Go to [supabase.com](https://supabase.com) → **New project**. Pick a region
    close to your users (e.g. Singapore for the Philippines) and set a strong
    database password (save it somewhere safe).
-2. Once it's provisioned, open **SQL Editor** and run, in order,
-   `supabase/migrations/0001_init.sql` then
-   `supabase/migrations/0002_add_grade_components.sql` (paste each file in
-   full and click Run). Together these create every table, RLS policy,
-   trigger, and the per-item grading model.
+2. Once it's provisioned, open **SQL Editor** and run the contents of
+   `supabase/migrations/0001_init.sql` (paste the whole file in and click
+   Run). This creates every table, RLS policy, and trigger in one go.
    - Alternatively, with the Supabase CLI linked to your project:
      ```bash
      supabase link --project-ref YOUR_PROJECT_REF
@@ -126,10 +119,10 @@ role key, locally:
 ```bash
 cd seed
 npm install
-SUPABASE_URL=https://your-project-ref.supabase.co \
-  SUPABASE_SERVICE_ROLE_KEY=your-service-role-key \
+SUPABASE_URL=https://vlyhswezqzsgxwyclbsq.supabase.co \
+  SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZseWhzd2V6cXpzZ3h3eWNsYnNxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4Mzc2MjcwOCwiZXhwIjoyMDk5MzM4NzA4fQ.x5R8_QabF_JAxSWzOVcn5N2fgDL1XxHfkIRkNQ7I0TU \
   ADMIN_EMAIL=registrar@slsu.edu.ph \
-  ADMIN_PASSWORD='ChangeMe123!' \
+  ADMIN_PASSWORD='pass123' \
   ADMIN_NAME='Registrar Administrator' \
   node seed.js
 ```
@@ -173,7 +166,7 @@ dashboard.
 **Supabase local stack:**
 ```bash
 supabase start          # spins up local Postgres, Auth, Edge Functions, Studio
-supabase db reset        # applies every file in supabase/migrations/, in order
+supabase db reset        # applies supabase/migrations/0001_init.sql
 ```
 
 **Seed local test data:**
@@ -249,62 +242,10 @@ classes, can unlock a locked grade sheet (must supply a reason, written to
 `compute_grade_record()` is a `BEFORE INSERT OR UPDATE` trigger on
 `grade_records`. Every time a row is written — no matter what a client
 sent for `computed_final_grade` / `gpa_equivalent` — the trigger
-recalculates both and overwrites whatever was submitted. There's no RLS
+recalculates both from the raw score columns and the owning class's
+`grade_weights`, and overwrites whatever was submitted. There's no RLS
 rule to bypass here because the value literally cannot exist any other
 way; it's computed server-side, always.
-
-**Grading model (as of migration 0002):** each class defines its own
-named, individually-weighted items in `classes.grade_components` — e.g.
-"Act 1" (5%), "Act 2" (5%), "Quiz 1" (10%), "Midterm" (25%) — instead of
-one blanket weight per category. The trigger matches each configured item
-to the array element at the same position in
-`grade_records.activities` / `.quizzes` / `.projects` (item 1 ↔ array
-index 1, item 2 ↔ array index 2, …), multiplies by that item's weight,
-and sums. A class with `grade_components = NULL` (i.e. one that predates
-migration 0002 and was never re-saved) falls back automatically to the
-original category-average behavior using `classes.grade_weights`, so
-nothing breaks retroactively — see "Migration notes" below.
-
-As before: if the weights actually used sum to less than 100 (some items
-not yet scored), `computed_final_grade` is `NULL` rather than a partial
-number — a student's grade only ever shows once it's actually complete.
-
-### Migration notes: category-average → per-item grading
-
-Migration `0002_add_grade_components.sql` adds `classes.grade_components`
-and backfills every existing class with a **single item per category**,
-carrying over that category's old weight verbatim:
-
-```json
-{
-  "activities": [{ "label": "Activities", "weight": 20 }],
-  "quizzes":    [{ "label": "Quizzes",    "weight": 20 }],
-  "projects":   [{ "label": "Projects",   "weight": 20 }],
-  "midtermExam": { "label": "Midterm Exam", "weight": 20 },
-  "finalExam":   { "label": "Final Exam",   "weight": 20 }
-}
-```
-
-This is chosen deliberately as the **minimal-risk** mapping: a class that
-only ever had one activity score behaves identically after migrating.
-**The one thing to know:** if an existing class had *multiple* scores in
-`grade_records.activities` (e.g. `[85, 90, 78]` averaged together under
-the old model), the single migrated item only reads array index 1 (`85`)
-going forward — the old "average everything in the array" behavior is
-gone, by design, since per-item grading means each array position is now
-a specific named item, not an interchangeable score to be averaged. If a
-class actually needs multiple activities, open it in the Grading Weights
-editor and add the extra items — the migration doesn't try to guess how
-to split one array into several named items on its own, since there's no
-way to infer what each historical score was *for*.
-
-After any weight change (migration-time or from the editor), the app
-forces a recompute pass — a no-op `UPDATE` on every affected
-`grade_records` row — so `computed_final_grade` reflects the new
-configuration immediately rather than waiting for a faculty member to
-next touch that row. Migration 0002 does this once for the whole table;
-`js/faculty.js`'s `recomputeExistingGrades()` does it per-class after an
-in-app weight edit.
 
 ### Why locking works the way it does
 
@@ -330,14 +271,12 @@ semesters                  id, name, academic_year_id, is_active
 subjects                   id, code, title, units, program
 sections                   id, name, program, year_level
 classes                     id, subject_id, section_id, faculty_id, academic_year_id,
-                             semester_id, grade_weights (jsonb, legacy category-average),
-                             grade_components (jsonb, per-item — see below), locked, status
+                             semester_id, grade_weights (jsonb), locked, status
 enrollments                 id, class_id, student_id, status — unique (class_id, student_id)
 grade_records                id, class_id, student_id, activities[], quizzes[], projects[],
                               midterm_exam, final_exam, computed_final_grade, gpa_equivalent
-                              — unique (class_id, student_id); array positions correspond
-                              1:1 to the item order in classes.grade_components; last 2
-                              columns are trigger-computed, never client-writable
+                              — unique (class_id, student_id); last 2 columns are
+                              trigger-computed, never client-writable
 attendance_records            id, class_id, student_id, date, status, remarks
                                — unique (class_id, student_id, date)
 reports                        id, type, generated_by, generated_at
@@ -348,45 +287,6 @@ audit_logs                      id, action, performed_by, target_table, target_i
 `(class_id, student_id[, date])` instead of Firestore's deterministic
 document-ID trick — `upsert(..., { onConflict: "class_id,student_id" })`
 from the client does the same job of "one row per student per class."
-
-## Testing
-
-**DB trigger tests** (`supabase/tests/compute_grade_record.test.sql`) — a
-self-contained script that creates its own fixtures, asserts the
-per-item math, the legacy fallback, partial/missing-item handling, and
-weight-change recompute, then cleans up after itself:
-
-```bash
-supabase start && supabase db reset
-psql "$(supabase status -o json | jq -r .DB_URL)" \
-  -f supabase/tests/compute_grade_record.test.sql
-```
-
-No errors + a final `NOTICE: === All assertions passed ===` means the
-trigger is behaving correctly. Each assertion also prints a `PASS [...]`
-line as it runs, so a failure tells you exactly which case broke.
-
-**Manual QA checklist for the per-item feature:**
-- [ ] Create a class → Grading Weights shows one default item per
-      category (Activities/Quizzes/Projects at 20% each) plus Midterm/Final.
-- [ ] Add 2 more activity items, remove the default one, rebalance
-      weights to sum to 100 → Save succeeds; total indicator turns green
-      only at exactly 100%.
-- [ ] Try saving with weights ≠ 100 → blocked with an inline error.
-- [ ] Open Grade Encoding for that class → column headers match the
-      configured item labels and counts, in the same order as the editor.
-- [ ] Enter scores for some students, leaving one item blank → that
-      student's row shows "Incomplete" and no final grade, live, before
-      saving.
-- [ ] Save → `computed_final_grade` appears for fully-scored students;
-      still blank for the incomplete one.
-- [ ] Re-open Grading Weights, change an item's weight, save → existing
-      students' final grades update without re-entering scores.
-- [ ] Export CSV → column headers match the configured item labels.
-- [ ] Sign in as an existing (pre-migration) class's faculty — one that
-      was never re-saved after migration 0002 — and confirm grades still
-      compute (via the legacy `grade_weights` fallback) with the same
-      values as before the migration.
 
 ## Extending this
 
@@ -404,3 +304,5 @@ line as it runs, so a failure tells you exactly which case broke.
 - **Scheduled digest**: `pg_cron` (a Supabase extension) can run a SQL
   function nightly to flag classes with incomplete grade sheets close to
   a grading-period deadline, instead of a scheduled Cloud Function.
+#   o c r s - w e b s i t e  
+ 
