@@ -42,38 +42,58 @@ export function fmtDateTime(value) {
   return d.toLocaleString("en-PH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-// Weighted component config: { activities, quizzes, projects, midtermExam, finalExam } summing to 100
-export const DEFAULT_WEIGHTS = { activities: 20, quizzes: 20, projects: 20, midtermExam: 20, finalExam: 20 };
+// Default per-item grading config for a brand-new class: one item per
+// category (matches the DB migration's backfill mapping for old classes).
+// Faculty add/rename/reweight items from the Grading Weights editor.
+export const DEFAULT_GRADE_COMPONENTS = {
+  activities: [{ label: "Activities", weight: 20 }],
+  quizzes: [{ label: "Quizzes", weight: 20 }],
+  projects: [{ label: "Projects", weight: 20 }],
+  midtermExam: { label: "Midterm Exam", weight: 20 },
+  finalExam: { label: "Final Exam", weight: 20 },
+};
 
-export function average(arr = []) {
-  const nums = arr.map((n) => Number(n)).filter((n) => !Number.isNaN(n));
-  if (!nums.length) return null;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
+export function totalComponentWeight(components) {
+  const listTotal = ["activities", "quizzes", "projects"].reduce(
+    (sum, cat) => sum + (components[cat] || []).reduce((s, item) => s + (Number(item.weight) || 0), 0), 0);
+  const singleTotal = ["midtermExam", "finalExam"].reduce(
+    (sum, key) => sum + (components[key] ? Number(components[key].weight) || 0 : 0), 0);
+  return Math.round((listTotal + singleTotal) * 100) / 100;
 }
 
-// Computes a weighted final grade (0-100 scale) from raw component scores.
-// This mirrors the logic authoritatively re-computed server-side in Cloud Functions;
-// the client copy is used only for live preview while faculty are encoding.
-export function computeWeightedFinal(record, weights = DEFAULT_WEIGHTS) {
-  const parts = [
-    ["activities", average(record.activities)],
-    ["quizzes", average(record.quizzes)],
-    ["projects", average(record.projects)],
-    ["midtermExam", record.midtermExam],
-    ["finalExam", record.finalExam],
-  ];
+// Mirrors compute_grade_record() in supabase/migrations/0002_add_grade_components.sql
+// EXACTLY — same per-item-by-array-position matching, same "only final once
+// weight_used >= 100" rule — so the live preview in the encoding table always
+// agrees with what the DB trigger will actually store.
+export function computeWeightedFinal(record, components = DEFAULT_GRADE_COMPONENTS) {
   let weightedSum = 0;
   let weightUsed = 0;
-  for (const [key, score] of parts) {
-    if (score === null || score === undefined || score === "") continue;
-    const w = weights[key] ?? 0;
-    weightedSum += Number(score) * (w / 100);
+
+  for (const cat of ["activities", "quizzes", "projects"]) {
+    const items = components[cat] || [];
+    const arr = record[cat] || [];
+    items.forEach((item, idx) => {
+      const val = arr[idx];
+      if (val === null || val === undefined || val === "") return;
+      const w = Number(item.weight) || 0;
+      weightedSum += Number(val) * (w / 100);
+      weightUsed += w;
+    });
+  }
+
+  for (const key of ["midtermExam", "finalExam"]) {
+    const item = components[key];
+    if (!item) continue;
+    const val = record[key];
+    if (val === null || val === undefined || val === "") continue;
+    const w = Number(item.weight) || 0;
+    weightedSum += Number(val) * (w / 100);
     weightUsed += w;
   }
-  if (weightUsed === 0) return { finalGrade: null, complete: false };
-  const finalGrade = weightUsed > 0 ? (weightedSum / weightUsed) * 100 : null;
-  const complete = weightUsed >= 100;
-  return { finalGrade: finalGrade === null ? null : Math.round(finalGrade * 100) / 100, complete };
+
+  if (weightUsed < 100) return { finalGrade: null, complete: false };
+  const finalGrade = Math.round((weightedSum / weightUsed) * 100 * 100) / 100;
+  return { finalGrade, complete: true };
 }
 
 // SLSU-style 1.0 (highest) – 5.0 (failing) equivalent from a 100-point final grade.

@@ -1,7 +1,8 @@
 import { supabase } from "./supabase-config.js";
 import { guardPage, logout } from "./auth.js";
 import {
-  $, $all, toast, initials, DEFAULT_WEIGHTS, computeWeightedFinal, remarkFor, downloadCSV,
+  $, $all, toast, initials, DEFAULT_GRADE_COMPONENTS, totalComponentWeight,
+  computeWeightedFinal, remarkFor, downloadCSV,
 } from "./utils.js";
 
 let PROFILE = null;
@@ -9,6 +10,8 @@ let STATE = {
   classes: [], subjects: {}, sections: {}, academicYears: [], semesters: [],
   enrollmentsByClass: {}, studentsById: {}, gradeRecordsByClass: {},
 };
+
+const CATEGORY_LABELS = { activities: "Activities", quizzes: "Quizzes", projects: "Projects" };
 
 guardPage("faculty", async (profile) => {
   PROFILE = profile;
@@ -77,6 +80,10 @@ async function loadEverything() {
       (students || []).forEach((s) => (STATE.studentsById[s.id] = s));
     }
   }
+}
+
+function componentsFor(cls) {
+  return cls.grade_components || DEFAULT_GRADE_COMPONENTS;
 }
 
 function classLabel(cls) {
@@ -175,7 +182,7 @@ function wireModals() {
       section_id: $("#nc-section").value,
       academic_year_id: $("#nc-year").value,
       semester_id: $("#nc-semester").value,
-      grade_weights: DEFAULT_WEIGHTS,
+      grade_components: structuredClone(DEFAULT_GRADE_COMPONENTS),
       locked: false,
       status: "active",
     };
@@ -198,37 +205,10 @@ function wireModals() {
     const classId = $("#encoding-class-select").value;
     if (!classId) return toast("Select a class first.", "error");
     const cls = STATE.classes.find((c) => c.id === classId);
-    const w = cls.grade_weights || DEFAULT_WEIGHTS;
-    ["activities", "quizzes", "projects", "midtermExam", "finalExam"].forEach((k) => ($(`#w-${k}`).value = w[k]));
-    $("#weights-modal").classList.add("open");
+    openWeightsEditor(structuredClone(componentsFor(cls)));
   });
 
-  $("#save-weights-btn").addEventListener("click", async () => {
-    const classId = $("#encoding-class-select").value;
-    const w = {
-      activities: Number($("#w-activities").value) || 0,
-      quizzes: Number($("#w-quizzes").value) || 0,
-      projects: Number($("#w-projects").value) || 0,
-      midtermExam: Number($("#w-midtermExam").value) || 0,
-      finalExam: Number($("#w-finalExam").value) || 0,
-    };
-    const total = Object.values(w).reduce((a, b) => a + b, 0);
-    if (total !== 100) {
-      $("#weights-error").textContent = `Weights must total 100% (currently ${total}%).`;
-      $("#weights-error").classList.add("show");
-      return;
-    }
-    const { error } = await supabase.from("classes").update({ grade_weights: w }).eq("id", classId);
-    if (error) return toast(error.message || "Could not save weights.", "error");
-    const cls = STATE.classes.find((c) => c.id === classId);
-    cls.grade_weights = w;
-    $("#weights-modal").classList.remove("open");
-    toast("Grading weights updated. Final grades will recompute automatically.");
-    // re-pull grade records so the recomputed values (done by the DB trigger on next write)
-    // are reflected — weight changes alone don't retro-trigger existing rows, so nudge a re-save:
-    await recomputeExistingGrades(classId, w);
-    renderEncodingTable();
-  });
+  $("#save-weights-btn").addEventListener("click", saveWeights);
 
   $("#lock-toggle-btn").addEventListener("click", async () => {
     const classId = $("#encoding-class-select").value;
@@ -236,7 +216,7 @@ function wireModals() {
     const cls = STATE.classes.find((c) => c.id === classId);
     if (cls.locked) return toast("Only an administrator can unlock a finalized grade sheet.", "error");
     if (!confirm("Lock this grade sheet? You won't be able to edit grades until an administrator unlocks it.")) return;
-    const { data, error } = await supabase.functions.invoke("lock-class-grades", { body: { classId } });
+    const { error } = await supabase.functions.invoke("lock-class-grades", { body: { classId } });
     if (error) return toast(error.message || "Could not lock grade sheet.", "error");
     cls.locked = true;
     toast("Grade sheet locked.");
@@ -251,9 +231,96 @@ function wireModals() {
   $("#export-attendance-btn").addEventListener("click", exportAttendance);
 }
 
-// Postgres RE-computes on INSERT/UPDATE only — if weights change, existing
-// rows need a no-op update to re-fire the trigger with the new weights.
-async function recomputeExistingGrades(classId, weights) {
+// ---------- Grading Weights editor (per-item) ----------
+function openWeightsEditor(components) {
+  const container = $("#comp-categories");
+  container.innerHTML = "";
+
+  for (const cat of ["activities", "quizzes", "projects"]) {
+    const tpl = $("#comp-category-template").content.cloneNode(true);
+    const catEl = tpl.querySelector(".comp-category");
+    catEl.dataset.cat = cat;
+    tpl.querySelector(".comp-category-title").textContent = CATEGORY_LABELS[cat];
+    const list = tpl.querySelector(".comp-item-list");
+    (components[cat] || []).forEach((item) => list.appendChild(makeItemRow(item)));
+    tpl.querySelector(".comp-add-item").addEventListener("click", () => {
+      list.appendChild(makeItemRow({ label: "", weight: 0 }));
+      updateTotalWeight();
+    });
+    container.appendChild(tpl);
+  }
+
+  $("#comp-midterm-label").value = components.midtermExam?.label ?? "Midterm Exam";
+  $("#comp-midterm-weight").value = components.midtermExam?.weight ?? 0;
+  $("#comp-final-label").value = components.finalExam?.label ?? "Final Exam";
+  $("#comp-final-weight").value = components.finalExam?.weight ?? 0;
+
+  $all("#weights-modal input[type=number]").forEach((inp) => inp.addEventListener("input", updateTotalWeight));
+  $("#weights-error").classList.remove("show");
+  updateTotalWeight();
+  $("#weights-modal").classList.add("open");
+}
+
+function makeItemRow(item) {
+  const row = $("#comp-item-row-template").content.cloneNode(true).querySelector(".comp-item-row");
+  row.querySelector(".comp-item-label").value = item.label || "";
+  row.querySelector(".comp-item-weight").value = item.weight ?? 0;
+  row.querySelector(".comp-item-weight").addEventListener("input", updateTotalWeight);
+  row.querySelector(".comp-remove-item").addEventListener("click", () => {
+    row.remove();
+    updateTotalWeight();
+  });
+  return row;
+}
+
+function readWeightsEditor() {
+  const components = { activities: [], quizzes: [], projects: [] };
+  $all(".comp-category").forEach((catEl) => {
+    const cat = catEl.dataset.cat;
+    $all(".comp-item-row", catEl).forEach((row) => {
+      const label = row.querySelector(".comp-item-label").value.trim();
+      const weight = Number(row.querySelector(".comp-item-weight").value) || 0;
+      if (label || weight) components[cat].push({ label: label || "Untitled item", weight });
+    });
+  });
+  components.midtermExam = { label: $("#comp-midterm-label").value.trim() || "Midterm Exam", weight: Number($("#comp-midterm-weight").value) || 0 };
+  components.finalExam = { label: $("#comp-final-label").value.trim() || "Final Exam", weight: Number($("#comp-final-weight").value) || 0 };
+  return components;
+}
+
+function updateTotalWeight() {
+  const total = totalComponentWeight(readWeightsEditor());
+  const el = $("#comp-total-weight");
+  el.textContent = `${total}%`;
+  el.style.color = total === 100 ? "var(--green-700)" : "var(--red-600)";
+}
+
+async function saveWeights() {
+  const classId = $("#encoding-class-select").value;
+  const components = readWeightsEditor();
+  const total = totalComponentWeight(components);
+  const err = $("#weights-error");
+  if (total !== 100) {
+    err.textContent = `Weights must total 100% (currently ${total}%).`;
+    err.classList.add("show");
+    return;
+  }
+  err.classList.remove("show");
+
+  const { error } = await supabase.from("classes").update({ grade_components: components }).eq("id", classId);
+  if (error) return toast(error.message || "Could not save weights.", "error");
+  const cls = STATE.classes.find((c) => c.id === classId);
+  cls.grade_components = components;
+  $("#weights-modal").classList.remove("open");
+  toast("Grading weights updated. Recomputing final grades…");
+  await recomputeExistingGrades(classId);
+  renderEncodingTable();
+}
+
+// The DB trigger only fires on INSERT/UPDATE — after changing a class's
+// weights, existing grade_records rows need a no-op UPDATE to re-run the
+// trigger with the new configuration.
+async function recomputeExistingGrades(classId) {
   const rows = STATE.gradeRecordsByClass[classId] || [];
   for (const g of rows) {
     await supabase.from("grade_records").update({ updated_at: new Date().toISOString() }).eq("id", g.id);
@@ -319,6 +386,22 @@ async function addToRoster() {
 }
 
 // ---------- Grade Encoding ----------
+// Builds the ordered list of {kind, cat, idx, field, label} columns for a
+// class's configured components. Column order === array order that will
+// be written to grade_records.activities/quizzes/projects — the DB trigger
+// matches items to array positions the same way (see migration 0002).
+function buildColumnPlan(components) {
+  const cols = [];
+  for (const cat of ["activities", "quizzes", "projects"]) {
+    (components[cat] || []).forEach((item, idx) => {
+      cols.push({ kind: "list", cat, idx, label: item.label, weight: item.weight });
+    });
+  }
+  cols.push({ kind: "single", field: "midtermExam", label: components.midtermExam?.label || "Midterm", weight: components.midtermExam?.weight ?? 0 });
+  cols.push({ kind: "single", field: "finalExam", label: components.finalExam?.label || "Final Exam", weight: components.finalExam?.weight ?? 0 });
+  return cols;
+}
+
 function renderEncodingTable() {
   const classId = $("#encoding-class-select").value;
   const card = $("#encoding-card");
@@ -331,7 +414,8 @@ function renderEncodingTable() {
   const cls = STATE.classes.find((c) => c.id === classId);
   const roster = STATE.enrollmentsByClass[classId] || [];
   const grades = STATE.gradeRecordsByClass[classId] || [];
-  const weights = cls.grade_weights || DEFAULT_WEIGHTS;
+  const components = componentsFor(cls);
+  const columns = buildColumnPlan(components);
 
   card.style.display = "block";
   saveRow.style.display = cls.locked ? "none" : "flex";
@@ -341,33 +425,41 @@ function renderEncodingTable() {
   banner.innerHTML = cls.locked
     ? `<div class="locked-banner">🔒 This grade sheet is locked. Contact an administrator to make further changes.</div>` : "";
 
+  $("#encoding-thead").innerHTML = `<tr>
+    <th>Student</th>
+    ${columns.map((c) => `<th class="num">${c.label}<span class="hint" style="display:block;font-weight:400">${c.weight}%</span></th>`).join("")}
+    <th class="num">Final Grade</th>
+    <th>Status</th>
+  </tr>`;
+
   $("#encoding-tbody").innerHTML = roster.length ? roster.map((enr) => {
     const student = STATE.studentsById[enr.student_id] || {};
     const g = grades.find((gr) => gr.student_id === enr.student_id) || {};
     const preview = computeWeightedFinal({
       activities: g.activities, quizzes: g.quizzes, projects: g.projects,
       midtermExam: g.midterm_exam, finalExam: g.final_exam,
-    }, weights);
+    }, components);
     const remark = remarkFor(preview.finalGrade);
     const dis = cls.locked ? "disabled" : "";
+    const cellsHTML = columns.map((c) => {
+      const val = c.kind === "list" ? (g[c.cat]?.[c.idx] ?? "") : (c.field === "midtermExam" ? g.midterm_exam : g.final_exam) ?? "";
+      const dataAttrs = c.kind === "list" ? `data-cat="${c.cat}" data-idx="${c.idx}"` : `data-field="${c.field}"`;
+      return `<td class="editable-cell num"><input type="number" step="0.01" ${dis} ${dataAttrs} value="${val}" /></td>`;
+    }).join("");
     return `<tr data-student="${enr.student_id}">
       <td><b>${student.full_name || "—"}</b><br/><span class="subtle">${student.student_number || ""}</span></td>
-      <td class="editable-cell num"><input type="text" ${dis} data-field="activities" value="${(g.activities||[]).join(",")}" /></td>
-      <td class="editable-cell num"><input type="text" ${dis} data-field="quizzes" value="${(g.quizzes||[]).join(",")}" /></td>
-      <td class="editable-cell num"><input type="text" ${dis} data-field="projects" value="${(g.projects||[]).join(",")}" /></td>
-      <td class="editable-cell num"><input type="number" ${dis} data-field="midtermExam" value="${g.midterm_exam ?? ""}" /></td>
-      <td class="editable-cell num"><input type="number" ${dis} data-field="finalExam" value="${g.final_exam ?? ""}" /></td>
+      ${cellsHTML}
       <td class="num mono preview-final" style="font-weight:700">${preview.finalGrade ?? "—"}</td>
       <td><span class="badge badge-${remark.tone}"><span class="dot"></span>${remark.label}</span></td>
     </tr>`;
-  }).join("") : `<tr><td colspan="8" class="empty-state">No students enrolled in this class yet.</td></tr>`;
+  }).join("") : `<tr><td colspan="${columns.length + 3}" class="empty-state">No students enrolled in this class yet.</td></tr>`;
 
   if (!cls.locked) {
     $all("#encoding-tbody input").forEach((input) => {
       input.addEventListener("input", () => {
         const row = input.closest("tr");
-        const record = readRow(row);
-        const preview = computeWeightedFinal(record, weights);
+        const record = readRow(row, columns);
+        const preview = computeWeightedFinal(record, components);
         const remark = remarkFor(preview.finalGrade);
         row.querySelector(".preview-final").textContent = preview.finalGrade ?? "—";
         const badge = row.querySelector(".badge");
@@ -378,27 +470,36 @@ function renderEncodingTable() {
   }
 }
 
-function readRow(row) {
-  const parseList = (v) => v.split(",").map((s) => s.trim()).filter(Boolean).map(Number).filter((n) => !Number.isNaN(n));
-  return {
-    activities: parseList(row.querySelector('[data-field="activities"]').value),
-    quizzes: parseList(row.querySelector('[data-field="quizzes"]').value),
-    projects: parseList(row.querySelector('[data-field="projects"]').value),
-    midtermExam: row.querySelector('[data-field="midtermExam"]').value === "" ? null : Number(row.querySelector('[data-field="midtermExam"]').value),
-    finalExam: row.querySelector('[data-field="finalExam"]').value === "" ? null : Number(row.querySelector('[data-field="finalExam"]').value),
-  };
+// Reads one student's row into { activities:[], quizzes:[], projects:[], midtermExam, finalExam },
+// with list arrays built in exact column order so they line up with the class's
+// grade_components item order (and therefore with what the DB trigger expects).
+function readRow(row, columns) {
+  const record = { activities: [], quizzes: [], projects: [], midtermExam: null, finalExam: null };
+  columns.forEach((c) => {
+    if (c.kind === "list") {
+      const input = row.querySelector(`[data-cat="${c.cat}"][data-idx="${c.idx}"]`);
+      const raw = input.value;
+      record[c.cat][c.idx] = raw === "" ? null : Number(raw);
+    } else {
+      const input = row.querySelector(`[data-field="${c.field}"]`);
+      record[c.field] = input.value === "" ? null : Number(input.value);
+    }
+  });
+  return record;
 }
 
 async function saveEncoding() {
   const classId = $("#encoding-class-select").value;
   if (!classId) return;
+  const cls = STATE.classes.find((c) => c.id === classId);
+  const columns = buildColumnPlan(componentsFor(cls));
   const btn = $("#save-encoding-btn");
   btn.disabled = true; btn.textContent = "Saving…";
   try {
     const rows = $all("#encoding-tbody tr[data-student]");
     const payloads = rows.map((row) => {
       const studentId = row.dataset.student;
-      const record = readRow(row);
+      const record = readRow(row, columns);
       return {
         class_id: classId, student_id: studentId,
         activities: record.activities, quizzes: record.quizzes, projects: record.projects,
@@ -407,8 +508,9 @@ async function saveEncoding() {
       };
     });
     // NOTE: computed_final_grade / gpa_equivalent are intentionally NOT sent —
-    // the compute_grade_record() trigger (see supabase/migrations/0001_init.sql)
-    // recomputes and overwrites those columns server-side on every insert/update.
+    // the compute_grade_record() trigger (supabase/migrations/0002_add_grade_components.sql)
+    // recomputes and overwrites those columns server-side on every insert/update,
+    // matching items to array positions exactly like buildColumnPlan() does here.
     const { data, error } = await supabase.from("grade_records")
       .upsert(payloads, { onConflict: "class_id,student_id" })
       .select();
@@ -479,14 +581,18 @@ function exportGrades() {
   const classId = $("#export-class-select").value;
   if (!classId) return toast("Select a class first.", "error");
   const cls = STATE.classes.find((c) => c.id === classId);
+  const components = componentsFor(cls);
+  const columns = buildColumnPlan(components);
   const roster = STATE.enrollmentsByClass[classId] || [];
   const grades = STATE.gradeRecordsByClass[classId] || [];
+  const headers = ["Student No.", "Name", ...columns.map((c) => c.label), "Final Grade", "GPA"];
   const rows = roster.map((enr) => {
     const s = STATE.studentsById[enr.student_id] || {};
     const g = grades.find((gr) => gr.student_id === enr.student_id) || {};
-    return [s.student_number, s.full_name, (g.activities||[]).join("/"), (g.quizzes||[]).join("/"), (g.projects||[]).join("/"), g.midterm_exam, g.final_exam, g.computed_final_grade, g.gpa_equivalent];
+    const cells = columns.map((c) => c.kind === "list" ? (g[c.cat]?.[c.idx] ?? "") : (c.field === "midtermExam" ? g.midterm_exam : g.final_exam) ?? "");
+    return [s.student_number, s.full_name, ...cells, g.computed_final_grade, g.gpa_equivalent];
   });
-  downloadCSV(`gradesheet_${classLabel(cls)}`, ["Student No.", "Name", "Activities", "Quizzes", "Projects", "Midterm", "Final Exam", "Final Grade", "GPA"], rows);
+  downloadCSV(`gradesheet_${classLabel(cls)}`, headers, rows);
 }
 
 async function exportAttendance() {

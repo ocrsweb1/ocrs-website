@@ -71,7 +71,16 @@ async function main() {
   const { data: cls } = await admin.from("classes").insert({
     faculty_id: facultyUid, subject_id: subj.id, section_id: sect.id,
     academic_year_id: ayr.id, semester_id: sem.id,
-    grade_weights: { activities: 20, quizzes: 20, projects: 20, midtermExam: 20, finalExam: 20 },
+    // Per-item grading: 2 activities (5% each), 2 quizzes (10% each),
+    // 1 project (20%), midterm (20%), final (25%) = 100%. Demonstrates
+    // the multi-item model, not just the single-item migration default.
+    grade_components: {
+      activities: [{ label: "Act 1", weight: 5 }, { label: "Act 2", weight: 5 }],
+      quizzes: [{ label: "Quiz 1", weight: 10 }, { label: "Quiz 2", weight: 10 }],
+      projects: [{ label: "Project", weight: 20 }],
+      midtermExam: { label: "Midterm", weight: 25 },
+      finalExam: { label: "Final", weight: 25 },
+    },
     locked: false, status: "active",
   }).select().single();
 
